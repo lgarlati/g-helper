@@ -333,11 +333,11 @@ namespace GHelper.AnimeMatrix
                     }
                     break;
                 case SlashDevice.BatteryStatus.FullyCharged:
-                    // fully charged, stop and dispose timer and show static
+                    // fully charged, stop and dispose timer and turn off
                     // Once unplugged, will auto generate new timer
                     slashTimer.Stop();
                     slashTimer.Dispose();
-                    deviceSlash.SetCustom(Enumerable.Repeat((byte)(AppConfig.Get("matrix_brightness", 0) * 85.333), 7).ToArray());
+                    deviceSlash.SetCustom(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0 });
                     break;
                 default:
                     // unknown status, show static on at target brightness
