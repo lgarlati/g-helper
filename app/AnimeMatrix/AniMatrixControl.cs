@@ -71,7 +71,7 @@ namespace GHelper.AnimeMatrix
 
             bool auto = AppConfig.Is("matrix_auto");
             bool lid = AppConfig.Is("matrix_lid");
-
+            
             Task.Run(() =>
             {
                 try
@@ -117,9 +117,8 @@ namespace GHelper.AnimeMatrix
                             }
                             break;
                         case SlashMode.BatteryLevel:
-                            // call tick to immediately update the pattern
-                            SlashTimer_start();
-                            SlashTimer_tick();
+                            Logger.WriteLine("Starting battery pattern");
+                            SlashTimer_Start();
                             break;
                         default:
                             deviceSlash.SetMode((SlashMode)running);
@@ -269,38 +268,26 @@ namespace GHelper.AnimeMatrix
             Logger.WriteLine("Matrix Clock");
         }
         
-        
-        private void SlashTimer_start(int interval = 60000)
+        private void SlashTimer_Start()
         {
-            // 100% to 0% in 1hr = 1% every 36 seconds
-            // 1 bracket every 14.2857 * 36s = 514s ~ 8m 30s
-            // only ~5 actually distinguishable levels, so refresh every <= 514/5 ~ 100s
-            // default is 60s
-
             // create the timer if first call
             // this way, the timer only spawns if user tries to use battery pattern
             if(slashTimer == default(System.Timers.Timer))
             {
-                slashTimer = new System.Timers.Timer(interval);
-                slashTimer.Elapsed += SlashTimer_elapsed;
+                slashTimer = new System.Timers.Timer(100);
+                slashTimer.Elapsed += SlashTimer_Elapsed;
                 slashTimer.AutoReset = true;
+                Logger.WriteLine("Created new slash timer");
             }
-            // only write if interval changed
-            if(slashTimer.Interval != interval)
-            {
-                slashTimer.Interval = interval;
-            }
-            
+            slashTimer.Interval = 100;
             slashTimer.Start();
+            Logger.WriteLine("Started battery pattern");
         }
 
-        private void SlashTimer_elapsed(object? sender, ElapsedEventArgs e)
+        private int charging_pattern_progress = 0;
+        private void SlashTimer_Elapsed(object? sender, ElapsedEventArgs e)
         {
-            SlashTimer_tick();
-        }
-
-        private void SlashTimer_tick()
-        {
+            Logger.WriteLine("slash timer elapsed");
             if (deviceSlash is null) return;
 
             //kill timer if called but not in battery pattern mode
@@ -308,12 +295,60 @@ namespace GHelper.AnimeMatrix
             {
                 slashTimer.Stop();
                 slashTimer.Dispose();
+                Logger.WriteLine("slash timer should not have been called, deleted timer");
                 return;
             }
 
-            deviceSlash.SetBatteryPattern(AppConfig.Get("matrix_brightness", 0));
-        }
+            // stopping and starting every time to make sure timer waits correct amount of time
+            slashTimer.Stop();
+            switch(SlashDevice.GetBatteryStatus())
+            {
+                case SlashDevice.BatteryStatus.Discharging:
+                    // 100% to 0% in 1hr = 1% every 36 seconds
+                    // 1 bracket every 14.2857 * 36s = 514s ~ 8m 30s
+                    // only ~5 actually distinguishable levels, so refresh every <= 514/5 ~ 100s
+                    slashTimer.Interval = 60000;
+                    deviceSlash.SetBatteryPattern(AppConfig.Get("matrix_brightness", 0));
+                    Logger.WriteLine("updated battery discharging pattern");
+                    break;
+                case SlashDevice.BatteryStatus.Charging:
+                    // 2000ms / 7 = 285.7 ~ 300ms
+                    const int animation_duration = 300;
+                    double percentage = 100*(SlashDevice.GetBatteryChargePercentage()/AppConfig.Get("charge_limit",100));
+                    int bracket = Math.Min(6, (int)Math.Ceiling(percentage / 14.2857));
+                    if(charging_pattern_progress > bracket) 
+                    {
+                        // make sure there is SOME delay
+                        slashTimer.Interval = (AppConfig.Get("matrix_interval", 0)*1000)+animation_duration;
+                        deviceSlash.SetCustom(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0 });
+                        charging_pattern_progress = 0;
+                        Logger.WriteLine("resetting battery charging pattern");
+                    }
+                    else
+                    {
+                        slashTimer.Interval = animation_duration;
+                        deviceSlash.SetLedsUpTo(AppConfig.Get("matrix_brightness", 0), charging_pattern_progress);
+                        charging_pattern_progress++;
+                        Logger.WriteLine("updated battery charging pattern to "+charging_pattern_progress);
+                    }
+                    break;
+                case SlashDevice.BatteryStatus.FullyCharged:
+                    // fully charged, stop and dispose timer and show static
+                    // Once unplugged, will auto generate new timer
+                    slashTimer.Stop();
+                    slashTimer.Dispose();
+                    deviceSlash.SetCustom(Enumerable.Repeat((byte)(AppConfig.Get("matrix_brightness", 0) * 85.333), 7).ToArray());
+                    break;
+                default:
+                    // unknown status, show static on at target brightness
+                    Logger.WriteLine("unknown battery status");
+                    slashTimer.Interval = 1000;
+                    deviceSlash.SetCustom(Enumerable.Repeat((byte)(AppConfig.Get("matrix_brightness", 0) * 85.333), 7).ToArray());
+                    break;
+            }
+            slashTimer.Start();
 
+        }
 
         public void Dispose()
         {

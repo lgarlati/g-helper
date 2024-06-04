@@ -1,4 +1,5 @@
 ﻿using GHelper.AnimeMatrix.Communication;
+using System.CodeDom;
 using System.Management;
 using System.Text;
 using System.Timers;
@@ -152,30 +153,88 @@ namespace GHelper.AnimeMatrix
                 }
                 return batteryCharge;
             }
-
-        private byte[] GetBatteryPattern(int brightness, double percentage)
+        
+        public enum BatteryStatus
         {
-            // because 7 segments, within each led segment represents a percentage bracket of (100/7 = 14.2857%)
-            // set brightness to reflect battery's percentage within that range
+            Discharging = 1,
+            Charging = 2,
+            FullyCharged = 3,
+            Low = 4,
+            Critical = 5,
+            ChargingAndHigh = 6,
+            ChargingAndLow = 7,
+            ChargingAndCritical = 8,
+            Undefined = 9,
+            PartiallyCharged = 10,
+            Unknown = 0 // Added for any undefined or unknown status
+        }
+        public static BatteryStatus GetBatteryStatus()
+        {
+            BatteryStatus status = BatteryStatus.Unknown;
+
+            try
+            {
+                // Query the Win32_Battery class
+                using (ManagementObjectSearcher searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Battery"))
+                {
+                    foreach (ManagementObject queryObj in searcher.Get())
+                    {
+                        // Get the battery status
+                        var batteryStatus = Convert.ToInt32(queryObj["BatteryStatus"]);
+
+                        // Set the status using the enum
+                        if (Enum.IsDefined(typeof(BatteryStatus), batteryStatus))
+                        {
+                            status = (BatteryStatus)batteryStatus;
+                        }
+                        else
+                        {
+                            status = BatteryStatus.Unknown;
+                        }
+                    }
+                }
+            }
+            catch (ManagementException e)
+            {
+                Console.WriteLine("An error occurred while querying for WMI data: " + e.Message);
+            }
+
+            return status;
+        }
+    
+        // returns byte array representing the battery pattern with the final led's brightness being percentage of that charge bracket
+        public void SetBatteryPattern(int brightness)
+        {
+            double percentage = 100*(GetBatteryChargePercentage()/AppConfig.Get("charge_limit",100));
 
             int bracket = (int)Math.Floor(percentage / 14.2857);
-            if(bracket >= 7) return Enumerable.Repeat((byte)(brightness * 85.333), 7).ToArray();
-            
+            if(bracket >= 7)
+            {
+                SetCustom(Enumerable.Repeat((byte)(brightness * 85.333), 7).ToArray());
+                return;
+            }
+
             byte[] batteryPattern = Enumerable.Repeat((byte)(0x00), 7).ToArray();
             for (int i = 6; i > 6-bracket; i--)
             {
                 batteryPattern[i] = (byte)(brightness * 85.333);
             }
-
-            //set the "selected" bracket to the percentage of that bracket filled from 0 to 255 as a hex
             batteryPattern[6-bracket] = (byte)(((percentage % 14.2857) * brightness * 85.333) / 14.2857);
 
-            return batteryPattern;
+            SetCustom(batteryPattern);
+            return;
         }
 
-        public void SetBatteryPattern(int brightness)
+        // set leds up to led (0-6) to brightness (0-3) from bottom up
+
+        public void SetLedsUpTo(int brightness, int led)
         {
-            SetCustom(GetBatteryPattern(brightness, 100*(GetBatteryChargePercentage()/AppConfig.Get("charge_limit",100))));
+            byte[] pattern = Enumerable.Repeat((byte)(0x00), 7).ToArray();
+            for (int i = 6; i > 6-led; i--)
+            {
+                pattern[i] = (byte)(brightness * 85.333);
+            }
+            SetCustom(pattern);
         }
 
         public void SetCustom(byte[] data)
