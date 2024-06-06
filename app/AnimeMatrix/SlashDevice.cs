@@ -130,9 +130,9 @@ namespace GHelper.AnimeMatrix
             Set(Packet<SlashPacket>(0xD3, 0x04, 0x00, 0x0C, 0x01, modeByte, 0x02, 0x19, 0x03, 0x13, 0x04, 0x11, 0x05, 0x12, 0x06, 0x13), "SlashMode");
         }
 
-        public void SetStatic(int brightness = 0)
+        public void SetStatic(int brightness = 0, bool log = true)
         {
-            SetCustom(Enumerable.Repeat((byte)(brightness * 85.333), 7).ToArray());
+            SetCustom(Enumerable.Repeat((byte)(brightness * 85.333), 7).ToArray(), log: log);
         }
 
         public static double GetBatteryChargePercentage()
@@ -203,14 +203,15 @@ namespace GHelper.AnimeMatrix
         }
     
         // returns byte array representing the battery pattern with the final led's brightness being percentage of that charge bracket
-        public void SetBatteryPattern(int brightness)
+        public void SetBatteryPattern(int brightness, bool log = true)
         {
             double percentage = 100*(GetBatteryChargePercentage()/AppConfig.Get("charge_limit",100));
 
             int bracket = (int)Math.Floor(percentage / 14.2857);
             if(bracket >= 7)
             {
-                SetCustom(Enumerable.Repeat((byte)(brightness * 85.333), 7).ToArray());
+                if(log) Logger.WriteLine("Battery fully charged");
+                SetStatic(brightness, log: log);
                 return;
             }
 
@@ -221,30 +222,30 @@ namespace GHelper.AnimeMatrix
             }
             batteryPattern[6-bracket] = (byte)(((percentage % 14.2857) * brightness * 85.333) / 14.2857);
 
-            SetCustom(batteryPattern);
+            if(log) Logger.WriteLine("Battery at ~"+Math.Round(percentage)+"% showing "+BitConverter.ToString(batteryPattern));
+            SetCustom(batteryPattern, log: log);
             return;
         }
 
         // set leds up to led (0-6) to brightness (0-3) from bottom up
-
-        public void SetLedsUpTo(int brightness, int led)
+        public void SetLedsUpTo(int brightness, int led, bool log = true)
         {
             byte[] pattern = Enumerable.Repeat((byte)(0x00), 7).ToArray();
-            for (int i = 6; i > 6-led; i--)
+            for (int i = 6; i >= 6-led; i--)
             {
                 pattern[i] = (byte)(brightness * 85.333);
             }
-            SetCustom(pattern);
+            SetCustom(pattern, log: log);
         }
 
-        public void SetCustom(byte[] data)
+        public void SetCustom(byte[] data, bool log = true)
         {
-            Set(Packet<SlashPacket>(0xD2, 0x02, 0x01, 0x08, 0xAC), "Static");
-            Set(Packet<SlashPacket>(0xD3, 0x03, 0x01, 0x08, 0xAC, 0xFF, 0xFF, 0x01, 0x05, 0xFF, 0xFF), "StaticSettings");
-            Set(Packet<SlashPacket>(0xD4, 0x00, 0x00, 0x01, 0xAC), "StaticSave");
+            Set(Packet<SlashPacket>(0xD2, 0x02, 0x01, 0x08, 0xAC), log?"Static":null);
+            Set(Packet<SlashPacket>(0xD3, 0x03, 0x01, 0x08, 0xAC, 0xFF, 0xFF, 0x01, 0x05, 0xFF, 0xFF), log?"StaticSettings":null);
+            Set(Packet<SlashPacket>(0xD4, 0x00, 0x00, 0x01, 0xAC), log?"StaticSave":null);
 
             byte[] payload = new byte[] { 0xD3, 0x00, 0x00, 0x07 };
-            Set(Packet<SlashPacket>(payload.Concat(data.Take(7)).ToArray()), "Static Data");
+            Set(Packet<SlashPacket>(payload.Concat(data.Take(7)).ToArray()), log?"Static Data":null);
         }
 
         public void SetOptions(bool status, int brightness = 0, int interval = 0)

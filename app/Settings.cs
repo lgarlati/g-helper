@@ -1297,7 +1297,7 @@ namespace GHelper
 
         private void ButtonQuit_Click(object? sender, EventArgs e)
         {
-            matrixControl.Dispose();
+            matrixControl.DisposeMatrixAudio();
             Close();
             Program.trayIcon.Visible = false;
             Application.Exit();
