@@ -123,7 +123,7 @@ namespace GHelper.AnimeMatrix
                             }
                             break;
                         case SlashMode.BatteryLevel:
-                            SlashTimer_Start(1 == AppConfig.Get("log_slash_battery_pattern", 0));
+                            SlashTimer_Start(log: 1 == AppConfig.Get("log_slash_battery_pattern", 0));
                             break;
                         default:
                             deviceSlash.SetMode((SlashMode)running);
@@ -167,17 +167,18 @@ namespace GHelper.AnimeMatrix
 
         private void SlashTimer_Start(bool log = true)
         {
+            if(log) Logger.WriteLine("Slash Timer: Starting");
             // if timer is null create one
             if(slashTimer is null)
             {
                 slashTimer = new System.Timers.Timer(100);
                 slashTimer.Elapsed += (sender, e) => SlashTimer_Elapsed(sender, e, log);
                 slashTimer.AutoReset = true;
-                if(log) Logger.WriteLine("Slash Battery Timer: New slash battery timer created");
+                if(log) Logger.WriteLine("Slash Timer: Created");
             }
             slashTimer.Interval = 100;
             slashTimer.Start();
-            if(log) Logger.WriteLine("Slash Battery Timer: Started");
+            if(log) Logger.WriteLine("Slash Timer: Started");
         }
 
         private int charging_pattern_progress = 0;
@@ -189,15 +190,23 @@ namespace GHelper.AnimeMatrix
             //kill timer if called but not in battery pattern mode
             if((SlashMode)AppConfig.Get("matrix_running", 0) != SlashMode.BatteryLevel)
             {
-                Logger.WriteLine("Slash Battery Timer: Error: timer should not be running!");
+                Logger.WriteLine("Slash Timer: Error - timer should not be running");
                 SlashTimer_Dispose(log);
                 return;
             }
 
             // stopping and starting every time to make sure timer waits correct amount of time
             slashTimer.Stop();
-            if(log) Logger.WriteLine("Slash Timer: Battery status = "+SlashDevice.GetBatteryStatus());
             int brightness = AppConfig.Get("matrix_brightness", 0);
+            int charge_limit = AppConfig.Get("charge_limit",100);
+            double current_charge = SlashDevice.GetBatteryChargePercentage();
+            if(log) {
+                Logger.WriteLine("Slash Timer: Battery info");
+                Logger.WriteLine("| Status = "+SlashDevice.GetBatteryStatus());
+                Logger.WriteLine("| Charge = "+current_charge);
+                Logger.WriteLine("| Limit  = "+charge_limit);
+            }
+
             switch(SlashDevice.GetBatteryStatus())
             {
                 case SlashDevice.BatteryStatus.Discharging:
@@ -205,14 +214,14 @@ namespace GHelper.AnimeMatrix
                     // 1 bracket every 14.2857 * 36s = 514s ~ 8m 30s
                     // only ~5 actually distinguishable levels, so refresh every <= 514/5 ~ 100s
                     slashTimer.Interval = 60000;
-                    deviceSlash.SetBatteryPattern(brightness, log: log);
-                    if(log) Logger.WriteLine("Slash Timer: Refreshed battery discharging pattern");
+                    deviceSlash.SetBatteryPattern(  brightness: brightness, 
+                                                    charge: current_charge,
+                                                    limit: charge_limit,
+                                                    log: log);
+                    if(log) Logger.WriteLine("Slash Timer: Refreshed discharging pattern");
                     break;
                 case SlashDevice.BatteryStatus.Charging:
                     const int animation_duration = 400;
-                    double current_charge = SlashDevice.GetBatteryChargePercentage();
-                    int charge_limit = AppConfig.Get("charge_limit",100);
-                    if(log) Logger.WriteLine("Slash Timer: battery charge = "+current_charge+", charge limit = "+charge_limit);
                     if((int)current_charge >= charge_limit-1)
                     {
                         if(log) Logger.WriteLine("Slash Timer: Battery fully charged");
@@ -223,14 +232,14 @@ namespace GHelper.AnimeMatrix
                     int bracket = Math.Min(6, (int)Math.Floor((100*current_charge/charge_limit) / 14.2857));
                     if(charging_pattern_progress > bracket)
                     {
-                        // make sure there is SOME delay
                         slashTimer.Interval = (AppConfig.Get("matrix_interval", 0)*1000)+animation_duration;
                         deviceSlash.SetStatic(brightness, log: log);
                         charging_pattern_progress = 0;
-                        if(log) Logger.WriteLine("Slash Timer: Reset charging pattern, bracket = "+bracket);
+                        if(log) Logger.WriteLine("Slash Timer: Charging pattern reset");
                     }
                     else
                     {
+                        if(log) Logger.WriteLine("Slash Timer: Showing charging pattern ("+charging_pattern_progress+"/"+bracket+"/7)");
                         slashTimer.Interval = animation_duration;
                         deviceSlash.SetLedsUpTo(brightness, charging_pattern_progress);
                         charging_pattern_progress++;
@@ -252,11 +261,11 @@ namespace GHelper.AnimeMatrix
                 slashTimer.Stop();
                 slashTimer.Dispose();
                 slashTimer = default!;
-                if(log) Logger.WriteLine("Slash Battery Timer: Disposed");
+                if(log) Logger.WriteLine("Slash Timer: Disposed");
             }
             else
             {
-                if(log) Logger.WriteLine("Slash Battery Timer: Cannot dispose of null timer");
+                if(log) Logger.WriteLine("Slash Timer: Cannot dispose of null timer");
             }
         }
 

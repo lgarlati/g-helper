@@ -203,9 +203,9 @@ namespace GHelper.AnimeMatrix
         }
     
         // returns byte array representing the battery pattern with the final led's brightness being percentage of that charge bracket
-        public void SetBatteryPattern(int brightness, bool log = true)
+        public void SetBatteryPattern(int brightness, double charge, double limit = 100, bool log = true)
         {
-            double percentage = 100*(GetBatteryChargePercentage()/AppConfig.Get("charge_limit",100));
+            double percentage = 100*(charge/limit);
 
             int bracket = (int)Math.Floor(percentage / 14.2857);
             if(bracket >= 7)
