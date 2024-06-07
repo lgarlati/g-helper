@@ -233,13 +233,13 @@ namespace GHelper.AnimeMatrix
                     if(charging_pattern_progress > bracket)
                     {
                         slashTimer.Interval = (AppConfig.Get("matrix_interval", 0)*1000)+animation_duration;
-                        deviceSlash.SetStatic(brightness, log: log);
+                        deviceSlash.SetStatic(0, log: log);
                         charging_pattern_progress = 0;
                         if(log) Logger.WriteLine("Slash Timer: Charging pattern reset");
                     }
                     else
                     {
-                        if(log) Logger.WriteLine("Slash Timer: Showing charging pattern ("+charging_pattern_progress+"/"+bracket+"/7)");
+                        if(log) Logger.WriteLine("Slash Timer: Showing charging pattern ("+(charging_pattern_progress+1)+"/"+bracket+"/7)");
                         slashTimer.Interval = animation_duration;
                         deviceSlash.SetLedsUpTo(brightness, charging_pattern_progress);
                         charging_pattern_progress++;

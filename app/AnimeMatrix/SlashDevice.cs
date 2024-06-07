@@ -230,7 +230,7 @@ namespace GHelper.AnimeMatrix
         // set leds up to led (0-6) to brightness (0-3) from bottom up
         public void SetLedsUpTo(int brightness, int led, bool log = true)
         {
-            byte[] pattern = Enumerable.Repeat((byte)(0x00), 7).ToArray();
+            byte[] pattern = new byte[7] { 0, 0, 0, 0, 0, 0, 0 };
             for (int i = 6; i >= 6-led; i--)
             {
                 pattern[i] = (byte)(brightness * 85.333);
